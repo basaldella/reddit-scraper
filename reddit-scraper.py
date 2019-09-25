@@ -610,28 +610,44 @@ Example:
     mode_group = parser.add_mutually_exclusive_group(required=True)
 
     mode_group.add_argument(
-        "--subs",
-        dest="subs_file",
-        type=str,
-        required=False,
-        default="",
-        help="A file containing the list of subreddits to scrape, one per line.",
-    )
-    mode_group.add_argument(
         "--posts",
         dest="posts_file",
         type=str,
-        required=False,
         default="",
         help="A file containing the list of posts to scrape, one per line.",
     )
+
+    mode_group.add_argument(
+        "--subs",
+        dest="subs_file",
+        type=str,
+        # required=False,
+        default="",
+        help="A file containing the list of subreddits to scrape, one per line.",
+    )
+
     mode_group.add_argument(
         "--config",
         dest="config_file",
         type=str,
-        required=False,
+        # required=False,
         default="",
         help="A file containing the arguments for the Pushshift APIs.",
+    )
+
+    parser.add_argument(
+        "--start",
+        dest="start_date",
+        type=str,
+        # required=True,
+        help="The date to start parsing from, in YYYY-MM-DD format",
+    )
+    parser.add_argument(
+        "--end",
+        dest="end_date",
+        type=str,
+        # required=True,
+        help="The final date of the parsing, in YYYY-MM-DD format",
     )
 
     parser.add_argument(
@@ -641,20 +657,7 @@ Example:
         required=True,
         help="The output folder",
     )
-    parser.add_argument(
-        "--start",
-        dest="start_date",
-        type=str,
-        required=True,
-        help="The date to start parsing from, in YYYY-MM-DD format",
-    )
-    parser.add_argument(
-        "--end",
-        dest="end_date",
-        type=str,
-        required=True,
-        help="The final date of the parsing, in YYYY-MM-DD format",
-    )
+
     parser.add_argument(
         "--blacklist",
         dest="blacklist_file",
@@ -678,12 +681,15 @@ Example:
 
     args = parser.parse_args()
 
-    pattern = re.compile("^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]")
-    if not (pattern.match(args.start_date) and pattern.match(args.end_date)):
-        print("Invalid date format.\n")
-        parser.print_help()
-        print("Exiting...")
-        exit(1)
+    if args.config_file or args.subs_file:
+        if not (args.start_date and args.end_date):
+            parser.error(
+                "Start date and end date are required in --config or --subs mode."
+            )
+
+        pattern = re.compile("^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$")
+        if not (pattern.match(args.start_date) and pattern.match(args.end_date)):
+            parser.error("Invalid date format.")
 
     check_output_directory(args.output_folder)
 
