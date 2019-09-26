@@ -597,13 +597,9 @@ def main():
         description=textwrap.dedent(
             """\
 Scrapes subreddits and puts their content in a plain text file.
-The scraping is date-based: the script starts from START_DATE and 
-ends at END_DATE.
-
-Example:
-\treddit-scraper.py --subs subreddits.txt --output scraped --start 2015-01-01 --end 2016-12-31 --workers 8
-\tScrapes all the subreddits specified in \'subreddits.txt\', from January 1, 2015 to December 31, 2016, 
-\tusing 8 parallel processes, and saves them in ./scraped/ ."""
+Use with --posts to download posts, --subs to download
+subreddits, and --config to make custom Pushshift API calls. 
+"""
         ),
     )
 
@@ -614,7 +610,7 @@ Example:
         dest="posts_file",
         type=str,
         default="",
-        help="A file containing the list of posts to scrape, one per line.",
+        help="A file containing the list of posts to download, one per line.",
     )
 
     mode_group.add_argument(
@@ -623,7 +619,7 @@ Example:
         type=str,
         # required=False,
         default="",
-        help="A file containing the list of subreddits to scrape, one per line.",
+        help="A file containing the list of subreddits to download, one per line.",
     )
 
     mode_group.add_argument(
@@ -632,7 +628,7 @@ Example:
         type=str,
         # required=False,
         default="",
-        help="A file containing the arguments for the Pushshift APIs.",
+        help="A file containing the arguments for the Pushshift APIs. See config.default.txt for a sample config file.",
     )
 
     parser.add_argument(
@@ -672,7 +668,7 @@ Example:
         type=int,
         required=False,
         default=1,
-        help="Number of parallel scraper workers",
+        help="Number of parallel workers",
     )
 
     if len(sys.argv[1:]) == 0:
@@ -693,13 +689,16 @@ Example:
 
     check_output_directory(args.output_folder)
 
+    try:
+        reddit = do_reddit_login()
+    except ImportError:
+        parser.error("Failed to load configuration. Did you create reddit_config.py?")
+
     if args.subs_file:
 
         subs = load_list_from_file(args.subs_file)
 
         blacklist = load_blacklist(args.blacklist_file) if args.blacklist_file else []
-
-        reddit = do_reddit_login()
 
         if args.num_workers > 1:
             with Pool(args.num_workers) as p:
@@ -737,8 +736,6 @@ Example:
 
         blacklist = load_blacklist(args.blacklist_file) if args.blacklist_file else []
 
-        reddit = do_reddit_login()
-
         if args.num_workers > 1:
             with Pool(args.num_workers) as p:
                 p.map(
@@ -753,8 +750,6 @@ Example:
     else:
         blacklist = load_blacklist(args.blacklist_file) if args.blacklist_file else []
         config = load_config(args.config_file) if args.config_file else {}
-
-        reddit = do_reddit_login()
 
         if args.num_workers > 1:
             with Pool(args.num_workers) as p:
