@@ -14,6 +14,16 @@ import time
 
 from multiprocessing import Pool
 
+try:
+    import reddit_config as config
+except ImportError:
+    print("You should create a file named reddit_config.py before running this script.")
+    print(
+        "Have a look at the README or just rename reddit_config.py and put your Reddit"
+    )
+    print("API credentials in there.")
+    exit(1)
+
 # ~~~ Global constants ~~~ #
 
 # Output encoding
@@ -21,15 +31,21 @@ ENCODING = "utf8"
 # API endpoint
 PUSHSHIFT_ENDPOINT = "https://api.pushshift.io/reddit/search/submission"
 # Skip posts deleted by the author?
-SKIP_DELETED = True
+SKIP_DELETED = config.SKIP_DELETED
 # Skip posts deleted by mods/bots?
-SKIP_REMOVED = True
+SKIP_REMOVED = config.SKIP_REMOVED
+# Add the username of the users at the beginning of the lines?
+PRINT_USERS = config.PRINT_USERS
 # Word tokenizer
 TOKENIZER = nltk.tokenize.WordPunctTokenizer().tokenize
 # Maximum number of retries when the APIs return an error
 MAX_RETRIES = 5
 # Configuration file field separator
 CONFIG_FIELD_SEPARATOR = "\t"
+# Default user for posts with no author
+DEFAULT_NO_AUTHOR = "[ DELETED_AUTHOR ]"
+# Separator for username/post
+AUTHOR_SEP = " : "
 
 # Logging
 logging.basicConfig(
@@ -97,7 +113,13 @@ def scrape_comment_tree(comment):
     """
 
     comments = []
-    comments.extend([comment.body])
+
+    if PRINT_USERS:
+        author = comment.author.name if comment.author else DEFAULT_NO_AUTHOR
+        comments.extend([author + AUTHOR_SEP + comment.body])
+    else:
+        comments.extend([comment.body])
+
     for reply in comment.replies:
         comments.extend(scrape_comment_tree(reply))
     return comments
@@ -137,7 +159,14 @@ def scrape_submission(reddit, submission_id, blacklist, output_dir, status_messa
         return
 
     # Build list of contents
-    submission_list = [submission.title, submission.selftext]
+    if PRINT_USERS:
+        author = submission.author.name if submission.author else DEFAULT_NO_AUTHOR
+        submission_list = [
+            author + AUTHOR_SEP + submission.title,
+            author + AUTHOR_SEP + submission.selftext,
+        ]
+    else:
+        submission_list = [submission.title, submission.selftext]
 
     submission.comments.replace_more(None)
     for comment in submission.comments:
@@ -150,10 +179,23 @@ def scrape_submission(reddit, submission_id, blacklist, output_dir, status_messa
     # Put one sentence per line
     sentences = []
 
-    for submission in submission_list:
-        line_sentences = nltk.tokenize.sent_tokenize(remove_markdown(submission))
-        clean_lines = [conflate_spaces(sent) for sent in line_sentences]
-        clean_lines = [" ".join(TOKENIZER(sent)) for sent in clean_lines]
+    for _submission in submission_list:
+
+        if PRINT_USERS:
+
+            sub_author = _submission[: _submission.index(":") - 1]
+            sub_text = _submission[_submission.index(":") + 2 :]
+
+            line_sentences = nltk.tokenize.sent_tokenize(remove_markdown(sub_text))
+            clean_lines = [conflate_spaces(sent) for sent in line_sentences]
+            clean_lines = [
+                sub_author + AUTHOR_SEP + " ".join(TOKENIZER(sent))
+                for sent in clean_lines
+            ]
+        else:
+            line_sentences = nltk.tokenize.sent_tokenize(remove_markdown(_submission))
+            clean_lines = [conflate_spaces(sent) for sent in line_sentences]
+            clean_lines = [" ".join(TOKENIZER(sent)) for sent in clean_lines]
 
         if len(clean_lines) > 0:
             if len(blacklist) == 0:
@@ -500,7 +542,6 @@ def do_reddit_login():
 
     :return: the `reddit` instance.
     """
-    import reddit_config as config
 
     reddit = praw.Reddit(
         client_id=config.CLIENT_ID,
@@ -693,6 +734,9 @@ subreddits, and --config to make custom Pushshift API calls.
         reddit = do_reddit_login()
     except ImportError:
         parser.error("Failed to load configuration. Did you create reddit_config.py?")
+        return
+        # here return useless since parser.error quits,
+        # but necessary to avoid the 'variable might not be initialized' warnings
 
     if args.subs_file:
 
